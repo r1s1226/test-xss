@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DBS iBanking postMessage XSS — PoC index</title>
+<style>
+ :root{color-scheme:dark}
+ body{margin:0;background:#0b1020;color:#e8eefc;font-family:system-ui,Segoe UI,Arial,sans-serif}
+ .wrap{max-width:820px;margin:0 auto;padding:36px 22px}
+ h1{font-size:20px;margin:0 0 4px}
+ .sub{color:#8ea0c8;font-size:13.5px}
+ a.btn{display:inline-block;background:#2f6df6;color:#fff;text-decoration:none;border-radius:8px;
+       padding:12px 18px;margin:14px 10px 0 0;font-size:14.5px}
+ a.btn.alt{background:#233258}
+ code{background:#111a2e;padding:1px 5px;border-radius:4px;font-size:12.5px}
+ ul{font-size:14px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DBS Internet Banking — <code>postMessage</code> → <code>javascript:</code> XSS</h1>
+  <div class="sub">Proof of concept for the report: unvalidated <code>message</code> sender on
+  <code>internet-banking.dbs.com.sg/digi-web/ngib/cul-onboarding</code>.</div>
+
+  <a class="btn" href="poc.html">Open the PoC page</a>
+  <a class="btn alt" href="poc.html?p=steal">Token-theft variant</a>
+
+  <h2 style="font-size:15px;margin-top:30px">Precondition you must satisfy</h2>
+  <ul>
+    <li>Allow pop-ups for this site.</li>
+    <li>The PoC opens the <b>genuine</b> DBS iBanking window. Sign in <b>inside that window</b>
+        (a new window cannot inherit the in-memory session).</li>
+    <li>Inside that window, open <b>Apply for a DBS Chromo Card</b> so the SPA mounts
+        <code>/cul-onboarding</code> — that page registers the vulnerable handler.</li>
+    <li>The injected <code>alert()</code> appears in the DBS window, not here.</li>
+  </ul>
+
+  <div class="sub" style="margin-top:26px">
+    Honest caveat: the card view is gated by the <code>isYoungAdultCardMVP1Enabled</code> feature flag
+    (served to authenticated users only) and the vulnerable handler is only registered once that view
+    mounts. If the flag is off for the test account the page deeplinks away and no dialog appears.
+    <br><br>
+    Full technical detail: <a href="README.md">README.md</a>.
+  </div>
+</div>
+</body>
+</html>
